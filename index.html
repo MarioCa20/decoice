@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcribe tu clase</title>
+<meta name="description" content="Transcribe clases grabadas e identifica quién habla. Todo se procesa en tu equipo.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('ttc-theme'); } catch (e) {}
+    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+/* ---------- Tokens ---------- */
+:root {
+  --paper: #f5f7fb;
+  --sheet: #ffffff;
+  --sunk: #eaeff7;
+  --ink: #131c3a;
+  --ink-2: #4a5578;
+  --ink-3: #66708f;
+  --rule: #d5deec;
+  --rule-strong: #b3c0d9;
+  --margin: #e5532b;          /* línea de margen del cuaderno */
+  --accent: #2038c8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3e8fb;
+  --hl: #ffd23f;              /* marcatextos */
+  --danger: #a8231b;
+  --danger-soft: #fdecea;
+  --ok: #17724a;
+  --shadow: 0 1px 2px rgb(19 28 58 / .06), 0 8px 24px -12px rgb(19 28 58 / .18);
+
+  --sp1-bg: #ffe27a; --sp1-dot: #c79a00;
+  --sp2-bg: #ffc2d6; --sp2-dot: #d6336c;
+  --sp3-bg: #b9efc9; --sp3-dot: #1f9d55;
+  --sp4-bg: #bfe0ff; --sp4-dot: #1c7ed6;
+  --sp5-bg: #ffd1a8; --sp5-dot: #e8590c;
+  --sp6-bg: #dccbff; --sp6-dot: #7048e8;
+  --sp0-bg: #e3e7ef; --sp0-dot: #7b86a3;
+  --sp-fg: #131c3a;
+
+  --font-ui: "Avenir Next", Avenir, "Helvetica Neue", system-ui, sans-serif;
+  --font-display: "Avenir Next Condensed", "Avenir Next", "Arial Narrow", system-ui, sans-serif;
+  --font-read: Charter, "Iowan Old Style", "Sitka Text", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --line: 28px;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+:root[data-theme="dark"] {
+  --paper: #0c1428;
+  --sheet: #121c37;
+  --sunk: #0a1122;
+  --ink: #e8edfb;
+  --ink-2: #aab6d6;
+  --ink-3: #8a97ba;
+  --rule: #223058;
+  --rule-strong: #34447a;
+  --margin: #ff7a52;
+  --accent: #9fb4ff;
+  --accent-ink: #0c1428;
+  --accent-soft: #1b2850;
+  --hl: #ffd23f;
+  --danger: #ff9b92;
+  --danger-soft: #3a1a22;
+  --ok: #6fe0a6;
+  --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -14px rgb(0 0 0 / .7);
+
+  --sp1-bg: #4a3d0c; --sp1-dot: #ffd23f;
+  --sp2-bg: #4d1d33; --sp2-dot: #ff7fae;
+  --sp3-bg: #12432b; --sp3-dot: #55d98c;
+  --sp4-bg: #123a63; --sp4-dot: #6cb8ff;
+  --sp5-bg: #50290f; --sp5-dot: #ff9a52;
+  --sp6-bg: #33236b; --sp6-dot: #b095ff;
+  --sp0-bg: #232d4b; --sp0-dot: #8a97ba;
+  --sp-fg: #e8edfb;
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+body {
+  margin: 0; min-height: 100vh;
+  background: var(--paper); color: var(--ink);
+  font: 15px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg { display: block; }
+::selection { background: var(--hl); color: #131c3a; }
+
+/* ---------- Shell ---------- */
+.shell { display: grid; grid-template-columns: 19rem minmax(0, 1fr); min-height: 100vh; }
+
+.side {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  background: var(--sunk);
+  display: flex; flex-direction: column;
+  background-image:
+    linear-gradient(90deg, transparent calc(100% - 7px), var(--margin) calc(100% - 7px), var(--margin) calc(100% - 6px), transparent calc(100% - 6px),
+                    transparent calc(100% - 3px), var(--margin) calc(100% - 3px), var(--margin) calc(100% - 2px), transparent calc(100% - 2px));
+}
+.brand { padding: 1.5rem 1.5rem 1.25rem; display: flex; align-items: center; gap: .75rem; text-decoration: none; color: inherit; }
+.brand svg { width: 2.5rem; height: 2.5rem; flex: none; }
+.wordmark { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; line-height: 1; letter-spacing: -.01em; }
+.wordmark span { display: block; }
+.wordmark .hl {
+  display: inline-block; margin-top: .2rem; padding: 0 .3em .05em; margin-left: -.3em;
+  background: linear-gradient(transparent 22%, var(--hl) 22%, var(--hl) 92%, transparent 92%);
+  color: #131c3a; border-radius: 2px; transform: rotate(-1deg);
+}
+.side-body { padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.75rem; flex: 1; }
+.side h2 { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin: 0 0 .5rem; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hist-item { position: relative; display: flex; align-items: stretch; border-radius: 8px; }
+.hist-item > button.open {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: .55rem .6rem; border-radius: 8px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.hist-item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.hist-item.active { background: var(--accent-soft); }
+.hist-item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-item .m { font-size: .8125rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.icon-btn {
+  background: none; border: 0; border-radius: 6px; color: var(--ink-3);
+  min-width: 2rem; min-height: 2rem; display: inline-grid; place-items: center; padding: 0 .4rem; font-size: .8125rem;
+}
+.icon-btn:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink); }
+.icon-btn.armed { color: var(--danger); font-weight: 600; background: var(--danger-soft); }
+.icon-btn svg { width: 1rem; height: 1rem; }
+.hist-item .icon-btn { align-self: center; margin-right: .15rem; opacity: 0; }
+.hist-item:hover .icon-btn, .hist-item:focus-within .icon-btn, .hist-item .icon-btn.armed { opacity: 1; }
+@media (hover: none) { .hist-item .icon-btn { opacity: 1; } }
+.empty-note { color: var(--ink-3); font-size: .875rem; margin: 0; max-width: 24ch; }
+.privacy { margin-top: auto; font-size: .8125rem; color: var(--ink-3); display: flex; gap: .5rem; align-items: flex-start; }
+.privacy svg { width: 1rem; height: 1rem; flex: none; margin-top: .15rem; }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 2rem; min-height: 4.25rem; }
+.topbar .left { display: flex; align-items: center; gap: .75rem; }
+.btn.menu-btn { display: none; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 2.5rem; padding: 0 1rem; border-radius: 8px; border: 1px solid var(--rule-strong);
+  background: var(--sheet); font-weight: 600; text-decoration: none; color: var(--ink);
+  transition: background-color .15s, border-color .15s, transform .15s var(--ease);
+}
+.btn:hover { border-color: var(--ink-3); }
+.btn:active { transform: translateY(1px); }
+.btn svg { width: 1.0625rem; height: 1.0625rem; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.btn.block { width: 100%; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; transform: none; }
+.btn.sm { min-height: 2rem; padding: 0 .7rem; font-size: .875rem; }
+
+.content { width: 100%; max-width: 62rem; padding: 0 2rem 4rem; margin: 0 auto; flex: 1; }
+
+/* ---------- Nueva transcripción ---------- */
+h1 { font-family: var(--font-display); font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.02; letter-spacing: -.015em; margin: 1rem 0 .75rem; font-weight: 700; text-wrap: balance; max-width: 18ch; }
+.lede { color: var(--ink-2); font-size: 1.0625rem; max-width: 52ch; margin: 0 0 2rem; text-wrap: pretty; }
+
+.drop {
+  position: relative; display: grid; grid-template-columns: auto 1fr; gap: 1.75rem; align-items: center;
+  padding: 2.25rem 2.25rem; border-radius: 14px; cursor: pointer;
+  background: var(--sheet); border: 1.5px dashed var(--rule-strong);
+  transition: border-color .2s, background-color .2s;
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop .art { width: 5.5rem; height: 5.5rem; color: var(--accent); }
+.drop .t { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; line-height: 1.15; display: block; }
+.drop .s { color: var(--ink-2); display: block; margin-top: .25rem; }
+.drop .s b { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--hl); text-decoration-thickness: 3px; text-underline-offset: 2px; }
+.drop.has-file { cursor: default; border-style: solid; border-color: var(--rule-strong); background: var(--sheet); }
+.drop.has-file input { display: none; }
+.file-row { display: flex; align-items: center; gap: 1rem; grid-column: 1 / -1; min-width: 0; }
+.file-row .art { width: 2.75rem; height: 2.75rem; flex: none; }
+.file-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.file-row .size { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 2rem; margin: 2rem 0; }
+.field { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field > label, .field > .lbl { font-weight: 600; font-size: .875rem; }
+.field .opt { font-weight: 400; color: var(--ink-3); }
+.hint { color: var(--ink-3); font-size: .8125rem; margin: 0; max-width: 60ch; }
+.input {
+  width: 100%; min-height: 2.75rem; padding: .6rem .8rem; background: var(--sheet);
+  border: 1px solid var(--rule-strong); border-radius: 8px; resize: vertical;
+}
+.input::placeholder { color: var(--ink-3); }
+.input:hover { border-color: var(--ink-3); }
+.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.seg { display: inline-flex; padding: 3px; background: var(--sunk); border: 1px solid var(--rule); border-radius: 10px; align-self: flex-start; max-width: 100%; }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; }
+.seg span { display: block; padding: .45rem .95rem; border-radius: 7px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; transition: background-color .15s, color .15s; }
+.seg input:checked + span { background: var(--sheet); color: var(--ink); box-shadow: 0 1px 2px rgb(19 28 58 / .15), 0 0 0 1px var(--rule-strong); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg label:hover input:not(:checked) + span { color: var(--ink); }
+.actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.btn.go { min-height: 3rem; padding: 0 1.6rem; font-size: 1rem; }
+
+.notice {
+  display: flex; gap: .75rem; padding: .85rem 1rem; border-radius: 10px; margin: 0 0 1.5rem;
+  background: var(--danger-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.notice svg { width: 1.25rem; height: 1.25rem; color: var(--danger); flex: none; margin-top: .1rem; }
+.notice b { display: block; }
+.notice p { margin: .15rem 0 0; color: var(--ink-2); font-size: .9rem; }
+.notice code, .hint code, .errbox code { font-family: var(--font-mono); font-size: .85em; background: color-mix(in srgb, var(--ink) 9%, transparent); padding: .05em .35em; border-radius: 4px; }
+
+/* ---------- Interruptor ---------- */
+.switch { display: grid; grid-template-columns: auto 1fr; gap: .9rem; align-items: start; cursor: pointer; max-width: 40rem; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { width: 2.75rem; height: 1.6rem; border-radius: 1rem; background: var(--rule-strong); position: relative; transition: background-color .2s; margin-top: .1rem; }
+.switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: calc(1.6rem - 6px); height: calc(1.6rem - 6px); border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(19 28 58 / .3); transition: transform .25s var(--ease); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(1.15rem); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch .sw-text b { display: block; font-size: .9375rem; }
+.switch .sw-text small { color: var(--ink-3); font-size: .8125rem; display: block; max-width: 54ch; }
+.input:disabled { opacity: .5; cursor: not-allowed; background: var(--sunk); }
+
+/* ---------- Avisos de resultado y reproductor ---------- */
+.banner { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; padding: .85rem 1rem; border-radius: 10px; margin-bottom: 1rem; background: var(--sunk); border: 1px solid var(--rule); }
+.banner.err { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.banner .tx { flex: 1 1 22rem; min-width: 0; }
+.banner .tx b { display: block; }
+.banner .tx p { margin: .15rem 0 0; color: var(--ink-2); font-size: .9rem; overflow-wrap: anywhere; }
+.banner .ctl { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.banner .input { width: 6.5rem; min-height: 2rem; padding: .2rem .5rem; }
+.player-row { margin: 0 0 1.25rem; }
+.player-row audio { width: 100%; max-width: 34rem; height: 2.5rem; }
+button.ts { background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; font: inherit; color: inherit; border-radius: 4px; }
+button.ts:hover time { color: var(--accent); text-decoration: underline; }
+.pct { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
+
+/* ---------- Progreso ---------- */
+.progress { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 2rem; box-shadow: var(--shadow); }
+.progress h2 { font-family: var(--font-display); font-size: 1.75rem; line-height: 1.1; margin: 0 0 .25rem; word-break: break-word; }
+.progress .sub { color: var(--ink-2); margin: 0 0 1.75rem; }
+.steps { list-style: none; margin: 0 0 1.75rem; padding: 0; display: grid; gap: 0; }
+.steps li { display: grid; grid-template-columns: 2.25rem 1fr auto; gap: .75rem; align-items: center; min-height: 3.25rem; border-top: 1px solid var(--rule); color: var(--ink-3); }
+.steps li:first-child { border-top: 0; }
+.steps .mark { width: 1.75rem; height: 1.75rem; display: grid; place-items: center; }
+.steps .mark i { width: .5rem; height: .5rem; border-radius: 50%; background: var(--rule-strong); }
+.steps .mark svg { width: 1.5rem; height: 1.5rem; }
+.steps .name { font-weight: 600; }
+.steps .det { font-size: .875rem; font-variant-numeric: tabular-nums; }
+.steps li.done { color: var(--ink-2); }
+.steps li.done .mark { color: var(--ok); }
+.steps li.active { color: var(--ink); }
+.steps li.active .name { font-size: 1.0625rem; }
+.wave { display: flex; align-items: center; gap: 3px; height: 1.5rem; }
+.wave b { width: 3px; border-radius: 2px; background: var(--accent); height: 100%; transform-origin: center; animation: wv 1.1s var(--ease) infinite; }
+.wave b:nth-child(2) { animation-delay: .12s; } .wave b:nth-child(3) { animation-delay: .24s; } .wave b:nth-child(4) { animation-delay: .36s; } .wave b:nth-child(5) { animation-delay: .48s; }
+@keyframes wv { 0%, 100% { transform: scaleY(.25); } 45% { transform: scaleY(1); } }
+.bar { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; margin: .25rem 0 1.25rem; }
+.bar > div { height: 100%; width: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .9s linear; }
+.progress .foot { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; color: var(--ink-3); font-size: .875rem; }
+
+.errbox { background: var(--sheet); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: 14px; padding: 2rem; }
+.errbox h2 { font-family: var(--font-display); font-size: 1.75rem; margin: 0 0 .5rem; display: flex; gap: .6rem; align-items: center; }
+.errbox h2 svg { width: 1.75rem; height: 1.75rem; color: var(--danger); }
+.errbox p { margin: 0 0 1.5rem; color: var(--ink-2); max-width: 60ch; }
+
+/* ---------- Resultado ---------- */
+.rhead { padding: 1rem 0 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: flex-end; justify-content: space-between; }
+.rhead .titlebox { min-width: 0; flex: 1 1 24rem; }
+.title-input {
+  width: 100%; background: transparent; border: 0; border-bottom: 1.5px solid transparent; padding: .1rem 0;
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(1.75rem, 3.5vw, 2.5rem); line-height: 1.1; letter-spacing: -.01em; text-overflow: ellipsis;
+}
+.title-input:hover { border-bottom-color: var(--rule-strong); }
+.title-input:focus-visible { outline: none; border-bottom-color: var(--accent); }
+.meta { color: var(--ink-3); font-variant-numeric: tabular-nums; margin-top: .25rem; }
+.tools { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.tools .grp { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 8px; overflow: hidden; background: var(--sheet); }
+.tools .grp .lab { display: grid; place-items: center; padding: 0 .75rem; font-size: .8125rem; color: var(--ink-3); border-right: 1px solid var(--rule); }
+.tools .grp a { display: grid; place-items: center; min-height: 2.5rem; padding: 0 .85rem; font-weight: 600; font-family: var(--font-mono); font-size: .875rem; text-decoration: none; color: var(--ink); }
+.tools .grp a + a { border-left: 1px solid var(--rule); }
+.tools .grp a:hover { background: var(--accent-soft); }
+
+.suggest { display: grid; gap: .5rem; margin-bottom: 1.25rem; }
+.sg { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; padding: .7rem 1rem; background: var(--accent-soft); border-radius: 10px; }
+.sg .tx { flex: 1 1 18rem; }
+.sg .tx small { color: var(--ink-2); }
+
+.speakers { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: 0 0 1.5rem; padding: 0 0 1.25rem; border-bottom: 1px solid var(--rule); list-style: none; }
+.speakers li { display: flex; align-items: center; gap: .35rem; }
+.speakers .share { color: var(--ink-3); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.hint-line { color: var(--ink-3); font-size: .8125rem; margin: -.5rem 0 1.25rem; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: .4rem; border: 0; border-radius: 6px; padding: 0 .55rem; min-height: 1.75rem;
+  background: var(--sp-bg, var(--sp0-bg)); color: var(--sp-fg); font-weight: 650; font-size: .875rem; line-height: 1;
+  max-width: 100%; transition: filter .15s;
+}
+.chip i { width: .5rem; height: .5rem; border-radius: 50%; background: var(--sp-dot, var(--sp0-dot)); flex: none; }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.chip:hover { filter: saturate(1.4) brightness(.97); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.rename { min-height: 1.75rem; padding: 0 .5rem; width: 11rem; border: 1.5px solid var(--accent); border-radius: 6px; background: var(--sheet); font-weight: 600; font-size: .875rem; }
+.rename:focus-visible { outline: none; }
+.s1 { --sp-bg: var(--sp1-bg); --sp-dot: var(--sp1-dot); } .s2 { --sp-bg: var(--sp2-bg); --sp-dot: var(--sp2-dot); }
+.s3 { --sp-bg: var(--sp3-bg); --sp-dot: var(--sp3-dot); } .s4 { --sp-bg: var(--sp4-bg); --sp-dot: var(--sp4-dot); }
+.s5 { --sp-bg: var(--sp5-bg); --sp-dot: var(--sp5-dot); } .s6 { --sp-bg: var(--sp6-bg); --sp-dot: var(--sp6-dot); }
+
+.sheet {
+  background-color: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow);
+  padding: var(--line) 2rem 0 0; position: relative; overflow: hidden;
+  background-image: linear-gradient(to bottom, transparent calc(var(--line) - 1px), var(--rule) calc(var(--line) - 1px));
+  background-size: 100% var(--line); background-position: 0 var(--line);
+}
+.sheet::before { /* doble línea de margen */
+  content: ""; position: absolute; top: 0; bottom: 0; left: calc(9.75rem - 4px); width: 4px;
+  border-left: 1px solid var(--margin); border-right: 1px solid var(--margin); opacity: .8;
+}
+.turn { display: grid; grid-template-columns: 9.75rem minmax(0, 1fr); margin-bottom: var(--line); }
+.cue { padding: 0 1.25rem 0 1rem; display: flex; flex-direction: column; align-items: flex-start; }
+.cue .chip { height: var(--line); min-height: 0; }
+.cue .chip, .cue .rename { margin-top: 0; }
+.cue time { font-family: var(--font-mono); font-size: .75rem; color: var(--ink-3); line-height: var(--line); font-variant-numeric: tabular-nums; }
+.txt { padding-left: 1.5rem; margin: 0; font-family: var(--font-read); font-size: 1.125rem; line-height: var(--line); max-width: 68ch; text-wrap: pretty; }
+.turn.nospk .cue .chip { background: var(--sp0-bg); }
+
+/* ---------- Perfiles ---------- */
+.prof { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .15rem 0 .15rem .6rem; border-radius: 8px; }
+.prof:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.prof .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+
+/* ---------- Toast ---------- */
+.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 150%); opacity: 0; visibility: hidden; background: var(--ink); color: var(--paper); padding: .65rem 1.1rem; border-radius: 10px; font-weight: 600; box-shadow: var(--shadow); transition: transform .35s var(--ease), opacity .2s, visibility .35s; z-index: 50; max-width: calc(100vw - 2rem); }
+.toast.show { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
+
+/* ---------- Entrada ---------- */
+.view { animation: rise .5s var(--ease) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.turn { animation: rise .45s var(--ease) both; animation-delay: calc(min(var(--i, 0), 10) * 30ms); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 62rem) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: fixed; inset: 0 auto 0 0; width: min(20rem, 88vw); z-index: 40; transform: translateX(-102%); transition: transform .35s var(--ease); box-shadow: var(--shadow); height: 100dvh; }
+  .side.open { transform: none; }
+  .scrim { position: fixed; inset: 0; background: rgb(8 12 28 / .5); z-index: 30; }
+  .btn.menu-btn { display: inline-flex; }
+  .topbar { padding: .75rem 1rem; }
+  .content { padding: 0 1rem 3rem; }
+}
+@media (max-width: 40rem) {
+  .drop { grid-template-columns: 1fr; padding: 1.5rem; gap: 1rem; }
+  .drop .art { width: 3.5rem; height: 3.5rem; }
+  .opts { grid-template-columns: 1fr; margin: 1.5rem 0; }
+  .progress, .errbox { padding: 1.25rem; }
+  .steps li { grid-template-columns: 2rem 1fr; }
+  .steps .det { grid-column: 2; margin-top: -.5rem; padding-bottom: .5rem; }
+  .sheet { padding: var(--line) 1rem 0 1rem; }
+  .sheet::before { display: none; }
+  .turn { grid-template-columns: 1fr; margin-bottom: var(--line); }
+  .cue { flex-direction: row; align-items: center; gap: .6rem; padding: 0; }
+  .txt { padding-left: 0; }
+  .seg span { padding: .45rem .7rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<!--
+THESIS: Una transcripción es una hoja de apuntes: el estudiante lee su clase como la tomaría en un cuaderno Cornell, con la columna de pistas (quién y cuándo) separada del texto por la doble línea de margen. Rechaza el panel SaaS de tarjetas y el chat oscuro de IA.
+OWN-WORLD: papel cuadriculado azul-hielo (#f5f7fb) con renglones de 28px, tinta azul-noche, doble línea de margen bermellón, marcatextos amarillo como firma de marca y como código de color de los hablantes (seis marcadores). Noche: papel de plano azul marino. Sin sombras duras, sin degradados.
+STORY: El estudiante suelta la grabación, ve etapas honestas, lee la clase por intervenciones, nombra a cada voz y exporta; entiende que nada sale de su equipo.
+FIRST VIEWPORT: Barra lateral-columna de pistas (marca, historial, voces) a la izquierda con margen doble; a la derecha titular condensado "Convierte tu clase en apuntes", zona de soltar de 5.5rem con la onda→texto, opciones y el botón Transcribir.
+FORM: Hoja de apuntes Cornell (candidato 3 de 7: acta parlamentaria, guion, Cornell, partitura, hoja de subtitulado, cinta de sismógrafo, ficha de biblioteca); seed 3382ea92.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<div class="shell">
+  <aside class="side" id="side" aria-label="Historial y voces">
+    <a class="brand" href="/" aria-label="Transcribe tu clase, inicio">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#2038C8"/><g fill="#fff"><rect x="9" y="26" width="4.5" height="12" rx="2.25"/><rect x="16.5" y="18" width="4.5" height="28" rx="2.25"/><rect x="24" y="12" width="4.5" height="40" rx="2.25"/><rect x="31.5" y="21" width="4.5" height="22" rx="2.25"/></g><g stroke-linecap="round" stroke-width="4.5" fill="none"><path d="M41 22h14" stroke="#fff"/><path d="M41 32h14" stroke="#FFD23F"/><path d="M41 42h9" stroke="#fff"/></g></svg>
+      <div class="wordmark"><span>Transcribe</span><span class="hl">tu clase</span></div>
+    </a>
+    <div class="side-body">
+      <button class="btn primary block" id="btn-new" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Nueva transcripción
+      </button>
+      <section aria-labelledby="h-hist">
+        <h2 id="h-hist">Historial</h2>
+        <ul class="list" id="history"></ul>
+      </section>
+      <section aria-labelledby="h-prof">
+        <h2 id="h-prof">Voces guardadas</h2>
+        <ul class="list" id="profiles"></ul>
+      </section>
+      <p class="privacy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <span>Todo se procesa en este equipo. Tus clases no se suben a ningún servicio.</span>
+      </p>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="left">
+        <button class="btn ghost menu-btn" id="btn-menu" type="button" aria-controls="side" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          Historial
+        </button>
+      </div>
+      <button class="btn ghost" id="btn-theme" type="button" aria-label="Cambiar a modo oscuro">
+        <svg id="ico-theme" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+        <span id="lbl-theme">Oscuro</span>
+      </button>
+    </header>
+
+    <main class="content" id="content">
+
+      <!-- Nueva -->
+      <section class="view" id="v-new">
+        <h1>Convierte tu clase en apuntes</h1>
+        <p class="lede">Sube la grabación y obtendrás el texto con marcas de tiempo y quién dijo cada cosa.</p>
+        <div id="warn"></div>
+        <form id="form" novalidate>
+          <label class="drop" id="drop">
+            <input type="file" id="file" accept=".mp4,.mkv,.mp3,.wav,video/mp4,video/x-matroska,audio/mpeg,audio/wav,audio/x-wav">
+            <div id="drop-empty" style="display:contents">
+              <svg class="art" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                <g fill="currentColor"><rect x="4" y="24" width="4.5" height="16" rx="2.25"/><rect x="11.5" y="14" width="4.5" height="36" rx="2.25"/><rect x="19" y="6" width="4.5" height="52" rx="2.25"/><rect x="26.5" y="18" width="4.5" height="28" rx="2.25"/></g>
+                <g stroke-linecap="round" stroke-width="4.5"><path d="M38 20h22" stroke="currentColor"/><path d="M38 32h22" stroke="#e0a800"/><path d="M38 44h13" stroke="currentColor"/></g>
+              </svg>
+              <div>
+                <span class="t">Suelta aquí la grabación de tu clase</span>
+                <span class="s">o <b>elige un archivo</b> · mp4, mkv, mp3 o wav</span>
+              </div>
+            </div>
+            <div class="file-row" id="drop-file" hidden>
+              <svg class="art" viewBox="0 0 64 64" fill="none" aria-hidden="true" style="color:var(--accent)"><g fill="currentColor"><rect x="4" y="24" width="4.5" height="16" rx="2.25"/><rect x="11.5" y="14" width="4.5" height="36" rx="2.25"/><rect x="19" y="6" width="4.5" height="52" rx="2.25"/><rect x="26.5" y="18" width="4.5" height="28" rx="2.25"/></g><g stroke-linecap="round" stroke-width="4.5"><path d="M38 20h22" stroke="currentColor"/><path d="M38 32h22" stroke="#e0a800"/><path d="M38 44h13" stroke="currentColor"/></g></svg>
+              <span class="name" id="fname"></span>
+              <span class="size" id="fsize"></span>
+              <button class="btn ghost sm" type="button" id="fclear">Quitar</button>
+            </div>
+          </label>
+          <p class="hint" id="drop-err" role="alert" style="color:var(--danger);margin-top:.6rem" hidden></p>
+
+          <div class="opts">
+            <div class="field" role="radiogroup" aria-labelledby="l-lang">
+              <span class="lbl" id="l-lang">Idioma de la clase</span>
+              <div class="seg">
+                <label><input type="radio" name="lang" value="es" checked><span>Español</span></label>
+                <label><input type="radio" name="lang" value="en"><span>Inglés</span></label>
+                <label><input type="radio" name="lang" value="auto"><span>Detectar</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="nspk">Número de hablantes <span class="opt">(opcional)</span></label>
+              <input class="input" id="nspk" type="number" min="1" max="20" inputmode="numeric" placeholder="Automático" style="max-width:12rem">
+              <p class="hint">Si lo sabes, mejora la separación de voces.</p>
+            </div>
+            <div class="field wide">
+              <label class="switch" for="diar">
+                <input type="checkbox" id="diar" checked>
+                <span class="track" aria-hidden="true"></span>
+                <span class="sw-text"><b>Identificar hablantes</b><small id="diar-hint">Separa las voces y marca quién habla. Si lo apagas la transcripción es más rápida y podrás identificar hablantes después, sobre el mismo audio.</small></span>
+              </label>
+            </div>
+            <div class="field wide">
+              <label for="vocab">Vocabulario técnico <span class="opt">(opcional)</span></label>
+              <textarea class="input" id="vocab" rows="2" placeholder="Eigenvalores, Lagrangiano, Pinzón, ADN polimerasa…"></textarea>
+              <p class="hint">Nombres, siglas y términos de la materia, separados por comas. Ayudan al modelo a escribirlos bien.</p>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary go" id="go" type="submit" disabled>Transcribir</button>
+            <span class="hint" id="go-hint">Elige un archivo para empezar.</span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Progreso -->
+      <section class="view" id="v-prog" hidden>
+        <div class="progress" aria-live="polite">
+          <h2 id="p-title">Transcribiendo</h2>
+          <p class="sub" id="p-sub">Puedes dejar esta pestaña abierta y seguir con otra cosa.</p>
+          <ol class="steps" id="steps"></ol>
+          <div class="bar" id="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Progreso total"><div></div></div>
+          <div class="foot">
+            <span><span class="pct" id="p-pct">0 %</span> <span id="p-queue"></span></span>
+            <span><span id="p-elapsed">0:00</span> transcurridos · <button class="btn ghost sm" type="button" id="cancel">Cancelar</button></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Error -->
+      <section class="view" id="v-err" hidden>
+        <div class="errbox" role="alert">
+          <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg><span id="e-title">No se pudo transcribir</span></h2>
+          <p id="e-msg"></p>
+          <div class="actions"><button class="btn primary" id="e-retry" type="button">Intentar de nuevo</button><button class="btn" id="e-back" type="button">Volver al inicio</button></div>
+        </div>
+      </section>
+
+      <!-- Resultado -->
+      <section class="view" id="v-res" hidden>
+        <div class="rhead">
+          <div class="titlebox">
+            <input class="title-input" id="r-title" aria-label="Título de la transcripción" spellcheck="false">
+            <div class="meta" id="r-meta"></div>
+          </div>
+          <div class="tools">
+            <button class="btn" id="copy" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>
+              Copiar texto
+            </button>
+            <div class="grp" role="group" aria-label="Exportar"><span class="lab">Exportar</span><a id="x-txt" href="#" download>.txt</a><a id="x-srt" href="#" download>.srt</a><a id="x-md" href="#" download>.md</a></div>
+          </div>
+        </div>
+        <div id="banner"></div>
+        <div class="player-row" id="player-row" hidden><audio id="player" controls preload="none" aria-label="Audio de la clase"></audio></div>
+        <div class="suggest" id="suggest"></div>
+        <ul class="speakers" id="speakers" aria-label="Hablantes"></ul>
+        <p class="hint-line" id="spk-hint">Haz clic en un nombre para cambiarlo; se actualiza en toda la transcripción.</p>
+        <div class="sheet" id="sheet"></div>
+      </section>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+const ICON = {
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke-width="1.6"/><path d="m8 12.3 2.8 2.8L16 9.5"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+};
+
+/* ---------- Tema ---------- */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('#ico-theme').innerHTML = t === 'dark' ? ICON.sun : ICON.moon;
+  $('#lbl-theme').textContent = t === 'dark' ? 'Claro' : 'Oscuro';
+  $('#btn-theme').setAttribute('aria-label', t === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+}
+$('#btn-theme').onclick = () => {
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  store.set('ttc-theme', t); applyTheme(t);
+};
+applyTheme(document.documentElement.dataset.theme);
+
+/* ---------- Utilidades ---------- */
+function fmt(t) {
+  t = Math.max(0, Math.floor(t)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function fmtDur(t) { const m = Math.round(t / 60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60} min` : `${Math.max(1, m)} min`; }
+function fmtSize(b) { return b > 1e9 ? (b/1e9).toFixed(1)+' GB' : b > 1e6 ? Math.round(b/1e6)+' MB' : Math.max(1, Math.round(b/1e3))+' KB'; }
+function fmtDate(ts) { return new Date(ts * 1000).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+async function api(url, opts = {}) {
+  let r;
+  try { r = await fetch(url, opts); } catch { throw new Error('No hay conexión con la app. ¿Sigue corriendo `python app.py`?'); }
+  if (!r.ok) { let d = ''; try { d = (await r.json()).detail; } catch {} throw new Error(d || `Error ${r.status}`); }
+  return r.json();
+}
+function show(id) {
+  for (const v of ['new', 'prog', 'err', 'res']) $('#v-' + v).hidden = v !== id;
+  const el = $('#v-' + id); el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
+  window.scrollTo({ top: 0 });
+  closeMenu();
+}
+
+/* ---------- Menú móvil ---------- */
+function closeMenu() { $('#side').classList.remove('open'); $('#scrim').hidden = true; $('#btn-menu').setAttribute('aria-expanded', 'false'); }
+$('#btn-menu').onclick = () => { $('#side').classList.add('open'); $('#scrim').hidden = false; $('#btn-menu').setAttribute('aria-expanded', 'true'); };
+$('#scrim').onclick = closeMenu;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+
+/* ---------- Estado ---------- */
+const S = { file: null, rec: null, job: null, poll: null, tick: null, last: null, dismissed: new Set() };
+
+/* ---------- Estado del sistema ---------- */
+async function checkStatus() {
+  try {
+    const s = await api('/api/status'); const miss = [];
+    if (!s.ffmpeg) miss.push(['Falta ffmpeg', 'Instálalo (macOS: <code>brew install ffmpeg</code>; Windows: <code>winget install Gyan.FFmpeg</code>) y reinicia la app.']);
+    if (!s.token) miss.push(['Falta el token de Hugging Face', 'Es necesario para identificar hablantes. Crea un archivo <code>.env</code> con <code>HF_TOKEN=hf_…</code>; el README explica cómo obtenerlo.']);
+    if (!s.whisper || !s.pyannote) miss.push(['Faltan dependencias', 'Ejecuta <code>pip install -r requirements.txt</code> y reinicia la app.']);
+    const h = s.health || {};
+    if (h.state === 'error' && s.token) miss.push(['La identificación de hablantes no está disponible', esc(h.message) + ' Puedes transcribir sin hablantes mientras tanto.']);
+    clearTimeout(S.hc);
+    if (h.state === 'running' || h.state === 'pending') S.hc = setTimeout(checkStatus, 3000);
+    const ok = h.state === 'running' || h.state === 'pending'
+      ? `<p class="hint" role="status" style="margin:0 0 1.25rem">Verificando el modelo de hablantes… (unos segundos)</p>` : '';
+    $('#warn').innerHTML = ok + miss.map(([t, d]) => `<div class="notice" role="alert">${ICON.alert}<div><b>${t}</b><p>${d}</p></div></div>`).join('');
+  } catch {}
+}
+
+/* ---------- Historial y perfiles ---------- */
+let armed = null;
+function armDelete(btn, action) {
+  if (armed && armed.btn !== btn) disarm();
+  if (armed && armed.btn === btn) { clearTimeout(armed.t); armed = null; return action(); }
+  btn.classList.add('armed'); btn.dataset.html = btn.innerHTML; btn.textContent = '¿Borrar?';
+  armed = { btn, t: setTimeout(disarm, 3000) };
+}
+function disarm() { if (!armed) return; clearTimeout(armed.t); armed.btn.classList.remove('armed'); armed.btn.innerHTML = armed.btn.dataset.html; armed = null; }
+
+async function loadHistory() {
+  const ul = $('#history');
+  try {
+    const items = await api('/api/history');
+    if (!items.length) { ul.innerHTML = '<li><p class="empty-note">Aquí aparecerán tus clases ya transcritas.</p></li>'; return; }
+    ul.innerHTML = items.map(i => `
+      <li class="hist-item ${S.rec && S.rec.id === i.id ? 'active' : ''}" data-id="${i.id}">
+        <button class="open" type="button"><span class="t">${esc(i.title)}</span><span class="m">${fmtDate(i.created)} · ${fmtDur(i.duration)}</span></button>
+        <button class="icon-btn del" type="button" aria-label="Borrar ${esc(i.title)}">${ICON.trash}</button>
+      </li>`).join('');
+  } catch (e) { ul.innerHTML = `<li><p class="empty-note">No se pudo cargar el historial.</p></li>`; }
+}
+$('#history').addEventListener('click', e => {
+  const li = e.target.closest('.hist-item'); if (!li) return; const id = li.dataset.id;
+  if (e.target.closest('.del')) {
+    return armDelete(e.target.closest('.del'), async () => {
+      await api('/api/history/' + id, { method: 'DELETE' });
+      if (S.rec && S.rec.id === id) { S.rec = null; goNew(); }
+      loadHistory(); toast('Transcripción borrada');
+    });
+  }
+  if (e.target.closest('.open')) openRecord(id);
+});
+async function loadProfiles() {
+  const ul = $('#profiles');
+  try {
+    const items = await api('/api/profiles');
+    if (!items.length) { ul.innerHTML = '<li><p class="empty-note">Guarda la voz de un hablante para que se sugiera su nombre en clases nuevas.</p></li>'; return; }
+    ul.innerHTML = items.map(p => `<li class="prof" data-id="${p.id}"><span class="n">${esc(p.name)}</span><button class="icon-btn del" type="button" aria-label="Borrar la voz de ${esc(p.name)}">${ICON.trash}</button></li>`).join('');
+  } catch { ul.innerHTML = ''; }
+}
+$('#profiles').addEventListener('click', e => {
+  const b = e.target.closest('.del'); if (!b) return; const id = b.closest('.prof').dataset.id;
+  armDelete(b, async () => { await api('/api/profiles/' + id, { method: 'DELETE' }); loadProfiles(); if (S.rec) openRecord(S.rec.id, true); toast('Voz borrada'); });
+});
+
+/* ---------- Formulario ---------- */
+const EXT = ['.mp4', '.mkv', '.mp3', '.wav'];
+function setFile(f) {
+  const err = $('#drop-err'); err.hidden = true;
+  if (f) {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (!EXT.includes(ext)) { err.textContent = `“${f.name}” no es compatible. Usa mp4, mkv, mp3 o wav.`; err.hidden = false; f = null; }
+  }
+  S.file = f;
+  $('#drop').classList.toggle('has-file', !!f);
+  $('#drop-empty').hidden = !!f; $('#drop-empty').style.display = f ? 'none' : 'contents';
+  $('#drop-file').hidden = !f;
+  if (f) { $('#fname').textContent = f.name; $('#fname').title = f.name; $('#fsize').textContent = fmtSize(f.size); }
+  $('#go').disabled = !f;
+  $('#go-hint').textContent = f ? 'La transcripción se procesa en tu equipo y puede tardar varios minutos.' : 'Elige un archivo para empezar.';
+  if (!f) $('#file').value = '';
+}
+$('#file').onchange = e => setFile(e.target.files[0] || null);
+$('#fclear').onclick = e => { e.preventDefault(); setFile(null); };
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) setFile(f); });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+function goNew() { stopPolling(); S.rec = null; S.job = null; show('new'); loadHistory(); checkStatus(); }
+$('#btn-new').onclick = goNew;
+$('#e-back').onclick = goNew;
+$('#e-retry').onclick = () => { show('new'); };
+
+$('#form').addEventListener('submit', e => { e.preventDefault(); if (S.file) startJob(); });
+
+/* ---------- Procesamiento ---------- */
+$('#diar').addEventListener('change', () => { $('#nspk').disabled = !$('#diar').checked; });
+const LABEL = { subiendo: 'Subiendo el archivo', extrayendo: 'Extrayendo audio', transcribiendo: 'Transcribiendo', hablantes: 'Identificando hablantes', uniendo: 'Uniendo resultados' };
+function renderSteps(steps, stage, detail) {
+  const idx = steps.indexOf(stage);
+  $('#steps').innerHTML = steps.map((k, i) => {
+    const st = idx === -1 ? 'pending' : i < idx ? 'done' : i === idx ? 'active' : 'pending';
+    const mark = st === 'done' ? ICON.check : st === 'active' ? '<div class="wave" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></div>' : '<i></i>';
+    const det = st === 'done' ? 'Listo' : st === 'active' ? (detail || 'En curso') : '';
+    return `<li class="${st}" ${st === 'active' ? 'aria-current="step"' : ''}><span class="mark">${mark}</span><span class="name">${LABEL[k]}</span><span class="det">${esc(det)}</span></li>`;
+  }).join('');
+}
+function setBar(pct) {
+  pct = Math.max(0, Math.min(100, pct));
+  $('#pbar > div').style.transform = `scaleX(${pct / 100})`; $('#pbar').setAttribute('aria-valuenow', Math.round(pct));
+  $('#p-pct').textContent = Math.round(pct) + ' %';
+}
+function showProgress(name, steps, stage) {
+  $('#p-title').textContent = name; show('prog'); renderSteps(steps, stage, '');
+  setBar(0); $('#p-queue').textContent = ''; $('#p-elapsed').textContent = '0:00';
+  $('#cancel').disabled = false; $('#cancel').textContent = 'Cancelar';
+  S.t0 = Date.now(); clearInterval(S.tick);
+  S.tick = setInterval(() => { $('#p-elapsed').textContent = fmt((Date.now() - S.t0) / 1000); }, 1000);
+}
+function startJob() {
+  const diar = $('#diar').checked;
+  const q = new URLSearchParams({
+    filename: S.file.name, language: document.querySelector('input[name=lang]:checked').value,
+    vocabulary: $('#vocab').value, num_speakers: diar ? $('#nspk').value : '', diarize: diar ? '1' : '0',
+  });
+  S.last = true; S.job = null;
+  const upSteps = ['subiendo', 'extrayendo', 'transcribiendo', ...(diar ? ['hablantes', 'uniendo'] : [])];
+  showProgress(S.file.name, upSteps, 'subiendo');
+  const xhr = new XMLHttpRequest();
+  S.xhr = xhr;
+  xhr.open('POST', '/api/jobs?' + q);
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = ev => {
+    if (!ev.lengthComputable) return;
+    const p = ev.loaded / ev.total * 100;
+    renderSteps(upSteps, 'subiendo', `${Math.round(p)} % · ${fmtSize(ev.loaded)} de ${fmtSize(ev.total)}`); setBar(p * 0.03);
+  };
+  xhr.onload = () => {
+    let body = {}; try { body = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status >= 200 && xhr.status < 300) { S.job = body.id; store.set('ttc-job', body.id); poll(); }
+    else fail('No se pudo enviar el archivo', body.detail || `Error ${xhr.status}`);
+  };
+  xhr.onerror = () => fail('No se pudo enviar el archivo', 'No hay conexión con la app. ¿Sigue corriendo `python app.py`?');
+  xhr.send(S.file);
+}
+$('#cancel').onclick = async () => {
+  $('#cancel').disabled = true;
+  if (S.xhr && S.xhr.readyState !== 4 && !S.job) { S.xhr.abort(); goNew(); return; }
+  $('#cancel').textContent = 'Cancelando…';
+  $('#p-queue').textContent = 'Se detiene al terminar el bloque actual; lo ya procesado se guarda.';
+  try { await api(`/api/jobs/${S.job}/cancel`, { method: 'POST' }); } catch {}
+};
+function stopPolling() { clearTimeout(S.poll); clearInterval(S.tick); }
+function fail(title, msg) {
+  stopPolling(); store.set('ttc-job', null);
+  $('#e-title').textContent = title;
+  $('#e-msg').innerHTML = esc(msg).replace(/`([^`]+)`/g, '<code>$1</code>');
+  $('#e-retry').hidden = !S.file;
+  show('err');
+}
+async function poll() {
+  try {
+    const j = await api('/api/jobs/' + S.job);
+    S.t0 = Date.now() - (j.elapsed || 0) * 1000;
+    if (j.status === 'done') {
+      stopPolling(); store.set('ttc-job', null);
+      await openRecord(S.job);
+      toast(j.warning ? 'Transcripción lista, sin hablantes' : 'Transcripción lista'); return;
+    }
+    if (j.status === 'error') return fail('No se pudo transcribir', j.error);
+    if (j.status === 'cancelled') {
+      stopPolling(); store.set('ttc-job', null);
+      if (j.record_id) { await openRecord(j.record_id); toast('Cancelado. Lo transcrito hasta ahora quedó guardado'); return; }
+      toast('Cancelado'); return goNew();
+    }
+    const queued = j.status === 'queued';
+    renderSteps(j.steps, queued ? null : j.stage, queued ? '' : [j.detail, j.stage_elapsed > 5 ? `${fmt(j.stage_elapsed)} en esta etapa` : ''].filter(Boolean).join(' · '));
+    setBar(queued ? 3 : j.progress);
+    $('#p-queue').textContent = queued ? (j.position > 1 ? `· En cola: hay ${j.position - 1} antes que esta` : '· En cola, empieza en un momento') : '';
+    $('#p-title').textContent = j.filename;
+    S.poll = setTimeout(poll, 1000);
+  } catch (e) {
+    $('#p-queue').textContent = '· Reconectando con la app…';
+    S.poll = setTimeout(poll, 3000);
+  }
+}
+async function startDiarize(n) {
+  try {
+    const j = await api(`/api/history/${S.rec.id}/diarize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num_speakers: n || null }) });
+    S.job = j.id; S.file = null; store.set('ttc-job', j.id);
+    showProgress(j.filename, j.steps, j.steps[0]); poll();
+  } catch (err) { toast(err.message); }
+}
+
+/* ---------- Resultado ---------- */
+const nameOf = (rec, sid) => { const i = rec.speakers.findIndex(s => s.id === sid); return i < 0 ? 'Sin identificar' : (rec.speakers[i].name || `Hablante ${i + 1}`); };
+const colorOf = (rec, sid) => { const i = rec.speakers.findIndex(s => s.id === sid); return i < 0 ? '' : 's' + (i % 6 + 1); };
+function turnsOf(rec) {
+  const out = [];
+  for (const s of rec.segments) {
+    const l = out[out.length - 1];
+    let same = l && l.speaker === s.speaker;
+    if (same && !s.speaker) same = l.text.length < 320 && s.start - l.end < 2.5;  // sin hablantes: párrafos
+    if (same) { l.text += ' ' + s.text; l.end = s.end; }
+    else out.push({ speaker: s.speaker, start: s.start, end: s.end, text: s.text });
+  }
+  return out;
+}
+async function openRecord(id, keepScroll) {
+  try {
+    const rec = await api('/api/history/' + id);
+    S.rec = rec; renderResult(); if (!keepScroll) show('res'); else { for (const v of ['new','prog','err','res']) $('#v-' + v).hidden = v !== 'res'; }
+    loadHistory(); loadProfiles();
+  } catch (e) { toast(e.message); }
+}
+function chip(rec, sid, extra = '') {
+  const n = nameOf(rec, sid);
+  if (!sid) return `<span class="chip"><i></i><span>${n}</span></span>`;
+  return `<button class="chip ${colorOf(rec, sid)}" type="button" data-sid="${sid}" aria-label="Renombrar a ${esc(n)}" title="Clic para renombrar" ${extra}><i></i><span>${esc(n)}</span></button>`;
+}
+function renderResult() {
+  const rec = S.rec;
+  document.title = `${rec.title} · Transcribe tu clase`;
+  $('#r-title').value = rec.title;
+  const lang = { es: 'Español', en: 'Inglés', auto: 'Idioma detectado' }[rec.language] || '';
+  const hasSpk = rec.speakers.length > 0;
+  $('#r-meta').textContent = [fmtDur(rec.duration), hasSpk ? `${rec.speakers.length} ${rec.speakers.length === 1 ? 'hablante' : 'hablantes'}` : 'sin hablantes identificados', lang].join(' · ');
+  $('#speakers').hidden = !hasSpk; $('#spk-hint').hidden = !hasSpk;
+  const pl = $('#player'); $('#player-row').hidden = !rec.has_audio;
+  if (rec.has_audio) { const src = `/api/history/${rec.id}/audio`; if (!pl.src.endsWith(src)) { pl.pause(); pl.src = src; } }
+
+  // Avisos: hablantes pendientes / fallidos / transcripción incompleta
+  const d = rec.diarization || { status: 'ok' }; let bn = '';
+  if (!rec.complete) bn += `<div class="banner"><div class="tx"><b>Transcripción incompleta</b><p>Se canceló antes de terminar. Lo transcrito hasta ahora quedó guardado.</p></div></div>`;
+  if (rec.complete && (d.status === 'error' || d.status === 'skipped') && rec.has_audio) {
+    const err = d.status === 'error';
+    bn += `<div class="banner ${err ? 'err' : ''}" role="${err ? 'alert' : 'status'}"><div class="tx"><b>${err ? 'No se pudieron identificar los hablantes' : 'Esta transcripción no tiene hablantes identificados'}</b><p>${err ? esc(d.error || '') + ' La transcripción está completa; solo faltan los hablantes.' : 'El audio sigue guardado: puedes identificarlos ahora sin volver a transcribir.'}</p></div>
+      <div class="ctl"><label class="hint" for="retry-n">Hablantes</label><input class="input" id="retry-n" type="number" min="1" max="20" placeholder="Auto" inputmode="numeric"><button class="btn primary sm" id="retry-diar" type="button">${err ? 'Reintentar identificación de hablantes' : 'Identificar hablantes'}</button></div></div>`;
+  }
+  $('#banner').innerHTML = bn;
+  for (const f of ['txt', 'srt', 'md']) $('#x-' + f).href = `/api/history/${rec.id}/export?format=${f}`;
+
+  // Sugerencias de voz
+  const sg = Object.entries(rec.suggestions || {}).filter(([sid, s]) => {
+    const sp = rec.speakers.find(x => x.id === sid);
+    return sp && sp.name !== s.name && !S.dismissed.has(rec.id + sid + s.profile_id);
+  });
+  $('#suggest').innerHTML = sg.map(([sid, s]) => `
+    <div class="sg" data-sid="${sid}" data-name="${esc(s.name)}" data-key="${rec.id + sid + s.profile_id}">
+      <div class="tx"><b>${esc(nameOf(rec, sid))}</b> podría ser <b>${esc(s.name)}</b>.<br><small>La voz se parece a la que guardaste (similitud ${Math.round(s.score * 100)} %). Confírmalo tú: puede ser otra persona.</small></div>
+      <button class="btn sm primary yes" type="button">Sí, es ${esc(s.name)}</button><button class="btn sm no" type="button">No es</button>
+    </div>`).join('');
+
+  // Hablantes
+  const total = rec.segments.reduce((a, s) => a + (s.end - s.start), 0) || 1;
+  const time = {}; rec.segments.forEach(s => time[s.speaker] = (time[s.speaker] || 0) + s.end - s.start);
+  $('#speakers').innerHTML = rec.speakers.map(sp => `
+    <li data-sid="${sp.id}">${chip(rec, sp.id)}<span class="share">${Math.round((time[sp.id] || 0) / total * 100)} %</span>
+    ${rec.has_embeddings.includes(sp.id) ? `<button class="icon-btn savevoice" type="button" title="Guardar esta voz para reconocerla en otras clases" aria-label="Guardar la voz de ${esc(nameOf(rec, sp.id))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>` : ''}</li>`).join('');
+
+  // Intervenciones
+  const turns = turnsOf(rec);
+  $('#sheet').innerHTML = turns.map((t, i) => `
+    <article class="turn ${t.speaker ? '' : 'nospk'}" style="--i:${i}">
+      <div class="cue">${hasSpk ? chip(rec, t.speaker) : ''}${rec.has_audio ? `<button class="ts" type="button" data-t="${t.start}" aria-label="Escuchar desde ${fmt(t.start)}"><time datetime="PT${Math.floor(t.start)}S">${fmt(t.start)}</time></button>` : `<time datetime="PT${Math.floor(t.start)}S">${fmt(t.start)}</time>`}</div>
+      <p class="txt">${esc(t.text)}</p>
+    </article>`).join('');
+}
+
+// Reproducir desde una marca de tiempo / reintentar hablantes
+document.addEventListener('click', e => {
+  const ts = e.target.closest('#sheet button.ts');
+  if (ts) { const p = $('#player'); p.currentTime = +ts.dataset.t; p.play().catch(() => {}); return; }
+  if (e.target.closest('#retry-diar')) startDiarize(parseInt($('#retry-n').value, 10) || null);
+});
+// Renombrar
+document.addEventListener('click', e => {
+  const c = e.target.closest('#v-res button.chip'); if (!c) return;
+  startRename(c.dataset.sid, c);
+});
+function startRename(sid, anchor) {
+  const rec = S.rec; const cur = rec.speakers.find(s => s.id === sid).name || '';
+  const inp = document.createElement('input');
+  inp.className = 'rename'; inp.value = cur; inp.placeholder = nameOf(rec, sid); inp.setAttribute('aria-label', 'Nombre del hablante'); inp.maxLength = 80;
+  anchor.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = async save => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (save && v !== cur) {
+      try { S.rec = await api('/api/history/' + rec.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speaker_names: { [sid]: v } }) }); }
+      catch (err) { toast(err.message); }
+    }
+    renderResult();
+    const again = document.querySelector(`#speakers li[data-sid="${sid}"] .chip`); if (again) again.focus();
+  };
+  inp.onkeydown = ev => { if (ev.key === 'Enter') finish(true); else if (ev.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+}
+$('#r-title').addEventListener('change', async e => {
+  const v = e.target.value.trim(); if (!v) { e.target.value = S.rec.title; return; }
+  try { S.rec = await api('/api/history/' + S.rec.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: v }) }); renderResult(); loadHistory(); } catch (err) { toast(err.message); }
+});
+$('#r-title').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+
+// Sugerencias
+$('#suggest').addEventListener('click', async e => {
+  const box = e.target.closest('.sg'); if (!box) return;
+  if (e.target.closest('.no')) { S.dismissed.add(box.dataset.key); return renderResult(); }
+  if (e.target.closest('.yes')) {
+    try { S.rec = await api('/api/history/' + S.rec.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speaker_names: { [box.dataset.sid]: box.dataset.name } }) }); renderResult(); toast(`Ahora es ${box.dataset.name} en toda la transcripción`); }
+    catch (err) { toast(err.message); }
+  }
+});
+// Guardar voz
+$('#speakers').addEventListener('click', async e => {
+  const b = e.target.closest('.savevoice'); if (!b) return;
+  const sid = b.closest('li').dataset.sid; const sp = S.rec.speakers.find(s => s.id === sid);
+  if (!sp.name) { toast('Primero ponle nombre a este hablante'); const c = b.closest('li').querySelector('.chip'); return startRename(sid, c); }
+  try { const r = await api(`/api/history/${S.rec.id}/speakers/${sid}/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: sp.name }) }); toast(r.replaced ? `Voz de ${r.name} actualizada` : `Voz de ${r.name} guardada`); loadProfiles(); }
+  catch (err) { toast(err.message); }
+});
+
+// Copiar
+function plainText() {
+  const rec = S.rec;
+  return turnsOf(rec).map(t => `[${fmt(t.start)}] ${nameOf(rec, t.speaker)}\n${t.text}`).join('\n\n');
+}
+$('#copy').onclick = async () => {
+  const text = plainText();
+  try { await navigator.clipboard.writeText(text); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  toast('Texto copiado');
+};
+
+/* ---------- Inicio ---------- */
+(async function init() {
+  applyTheme(document.documentElement.dataset.theme);
+  loadHistory(); loadProfiles(); checkStatus();
+  try {
+    const active = await api('/api/jobs');
+    const saved = store.get('ttc-job');
+    const j = active.find(a => a.id === saved) || active[0];
+    if (j) { S.job = j.id; showProgress(j.filename, j.steps, j.stage); poll(); }
+  } catch {}
+})();
+})();
+</script>
+</body>
+</html>

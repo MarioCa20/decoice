@@ -1,0 +1,53 @@
+# Secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Entornos virtuales y dependencias
+venv/
+.venv/
+.venv.bak/
+env/
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Datos de usuario: audios, transcripciones, historial, perfiles de voz
+data/
+*.wav
+*.mp3
+*.mp4
+*.mkv
+*.m4a
+*.flac
+*.srt
+ffmpeg.log
+
+# Modelos pesados (se descargan solos desde Hugging Face)
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+models/
+.cache/
+huggingface/
+
+# Herramientas locales / SO / editores
+.impeccable/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
