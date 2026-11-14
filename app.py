@@ -112,6 +112,32 @@ def mem_info() -> str:
     return " · ".join(parts)
 
 
+def fmt_clock(seconds: float) -> str:
+    """Segundos -> 'm:ss' (o 'h:mm:ss' si pasa de una hora)."""
+    s = max(0, int(round(seconds)))
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+
+def log(tag: str, msg: str) -> None:
+    """Línea de diagnóstico con hora: 'HH:MM:SS [tag] mensaje'."""
+    print(f"{time.strftime('%H:%M:%S')} [{tag}] {msg}", flush=True)
+
+
+@contextlib.contextmanager
+def timed(tag: str, what: str):
+    """Registra inicio y fin de una etapa con tiempo empleado y memoria."""
+    log(tag, f"▶ {what} …  ({mem_info()})")
+    t0 = time.time()
+    try:
+        yield
+    except BaseException:
+        log(tag, f"✘ {what} interrumpido a los {fmt_clock(time.time() - t0)}")
+        raise
+    log(tag, f"✔ {what}  {fmt_clock(time.time() - t0)}  ({mem_info()})")
+
+
 # --------------------------------------------------------------------------
 # Trabajos en segundo plano
 # --------------------------------------------------------------------------

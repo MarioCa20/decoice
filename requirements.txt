@@ -6,7 +6,7 @@ numpy
 psutil
 # Transcripción: mlx-whisper solo en Mac con Apple Silicon; faster-whisper en el resto.
 mlx-whisper; sys_platform == "darwin" and platform_machine == "arm64"
-faster-whisper>=1.0; not (sys_platform == "darwin" and platform_machine == "arm64")
+faster-whisper>=1.0; sys_platform != "darwin" or platform_machine != "arm64"
 torch==2.8.0
 torchaudio==2.8.0
 pyannote.audio==3.4.0
